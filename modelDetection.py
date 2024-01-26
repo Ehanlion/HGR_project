@@ -5,7 +5,7 @@ import cv2
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
-model_path = "gesture_recognizer.task" # assume .task file in same folder as program
+model_path = "Models/gesture_recognizer.task" # assume .task file in same folder as program
 
 BaseOptions = mp.tasks.BaseOptions
 GestureRecognizer = mp.tasks.vision.GestureRecognizer
@@ -13,7 +13,7 @@ GestureRecognizerOptions = mp.tasks.vision.GestureRecognizerOptions
 GestureRecognizerResult = mp.tasks.vision.GestureRecognizerResult
 VisionRunningMode = mp.tasks.vision.RunningMode
 
-gresult = ["hello test"]
+gresult = [""]
 
 # Create a gesture recognizer instance with the live stream mode:
 def getResult(result: GestureRecognizerResult, output_image: mp.Image, timestamp_ms: int):
