@@ -1,7 +1,4 @@
-# Ethan Owen, 1/27/2024
-# modelDetection.py program draws MediaPipe overlay and classifies gestures.
-# Limited to classifying only left or right, whichever is seen first.
-# Current and Average FPS counters built in, program limited to 10 FPS (ideally).
+# Ethan Owen, 02/01/2024
 
 import mediapipe as mp
 import numpy as np
@@ -68,17 +65,12 @@ options = GestureRecognizerOptions(
 with GestureRecognizer.create_from_options(options) as recognizer:
     cap = cv2.VideoCapture(0) # open the cv2 video capture
     if not cap.isOpened(): exit() # kill the program if we cannot open the capture device
-    
-    # Setup for the hand tracking visualization:
-    mp_hands = mp.solutions.hands
-    mp_drawing = mp.solutions.drawing_utils
-    hands = mp_hands.Hands()
-    
+
     # trackers for the fps
     timestamp = 0 # start frame counter
     prev_frame_time = 0 # previous frames time for fps calculation
     total_fps = [] # list of last 'N' fps values for average calculation
-        
+    
     while True:
         ret, frame = cap.read() # grabe ret and frame, ret = T/F, frame = cv2 frame
         if not ret: break
@@ -87,21 +79,13 @@ with GestureRecognizer.create_from_options(options) as recognizer:
         fps, prev_frame_time = calculateCurrentFPS(prev_frame_time) # Calculate current fps 
         avg_fps, total_fps = calculateAverageFPS(total_fps) # Calculate average fps
         
-        # MediaPipe Hand tracking
-        hand_results = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) # process rgb frame for hand positions
-        
         # Setup image and then get result data from model:
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame) # define the mp_image
         result = recognizer.recognize_async(mp_image,timestamp) # get result from the recognizer
-        classification, handedness = getResultAndHandedness(str(format(gresult[-1]))) # extract the classification and handedness
+        classification, handedness = getResultAndHandedness(str(format(gresult[-1]))) # extract the classification and handedness       
         gresult = gresult[-1:] # slice and store last element only for size reasons
         print(f"Ts: {timestamp}, Class: {classification}, Hand: {handedness}")
         timestamp = timestamp + 1 # increment frame counter
-        
-        # Draw hand landmarks
-        if hand_results.multi_hand_landmarks:
-            for hand_landmarks in hand_results.multi_hand_landmarks:
-                mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
         
         # Add the overlay
         frame = cv2.flip(frame, 1) # flip the frame first
@@ -113,9 +97,13 @@ with GestureRecognizer.create_from_options(options) as recognizer:
 
         # Display the image
         cv2.imshow('frame', frame) # show the frame
-        if cv2.waitKey(1) == ord('q'): break
-        time.sleep(0.05) # this caps the fps at 10 fps (for whatever reason...)
-        
+        if cv2.waitKey(1) == ord('q'): 
+            cap.release()
+            cv2.destroyAllWindows()
+            break
+
 # clean up open captures and windows
 cap.release() # release the capture at the end
-cv2.destroyAllWindows() # clean and destroy opened windows
+cv2.destroyAllWindows() # clean and destroy opened windows  
+
+
