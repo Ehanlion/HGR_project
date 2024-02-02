@@ -7,7 +7,6 @@
 import mediapipe as mp
 import numpy as np
 import datetime as dt
-import asyncio
 import cv2
 import time
 import re
@@ -15,13 +14,15 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from collections import Counter
 
+# Configure global data:
 path = "Models/gesture_recognizer.task"  # set the path
 results = [""] # global tracker for results
 last_N_results = []
-max_N_results = 50
-min_acceptable_certainty = 40 # integer percentage, max 100
+max_N_results = 40
+min_acceptable_certainty = 50 # integer percentage, max 100
 certainty_weight = 40
 
+# Short hands for base options:
 BaseOptions = mp.tasks.BaseOptions
 GestureRecognizer = mp.tasks.vision.GestureRecognizer
 GestureRecognizerOptions = mp.tasks.vision.GestureRecognizerOptions
@@ -56,6 +57,7 @@ def get_certainty(lst):
     certainty = int((repetitions / total_values) * 100)
     return most_common, certainty
     
+# Configure Gesture Recognizer Options
 options = GestureRecognizerOptions(
     base_options=BaseOptions(model_asset_path=path),
     running_mode=VisionRunningMode.LIVE_STREAM,
@@ -112,6 +114,7 @@ with GestureRecognizer.create_from_options(options) as recognizer:
             capture.release()
             cv2.destroyAllWindows()
             break
-        
+
+# Close all open releases and captures:
 capture.release()
 cv2.destroyAllWindows()
