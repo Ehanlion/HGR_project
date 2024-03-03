@@ -3,15 +3,13 @@
 
 from huesdk import Discover
 from huesdk import Hue
+import time
 
-discover = Discover()
-# bridge_ip = discover.find_hue_bridge() 
-bridge_ip = discover.find_hue_bridge_mdns(timeout=5) # specifically local
-username = Hue.connect(bridge_ip=bridge_ip) # get username using ip address
-hue = Hue(bridge_ip=bridge_ip, username=username)
+# These are the values I found for my bridge
+bridge_ip = "192.168.1.148"
+bridge_username = "ysFHipKKPahizAwVKB8zYJlpPbVc4tyFBLF6MJDg"
 
-print(f'Bridge IP = {bridge_ip}')
-print(f'Bridge Username = {username}')
+hue = Hue(bridge_ip=bridge_ip, username=bridge_username)
 
 # Get light data:
 lights = hue.get_lights()
@@ -24,3 +22,14 @@ for light in lights:
     print(light.bri)
     print(light.hue)
     print(light.sat)
+    
+er_cornerLamp = hue.get_light(id_=1) # gets the first light
+er_bedLamp = hue.get_light(id_=2) # gets the second light
+
+# testing:
+er_cornerLamp.off()
+er_bedLamp.off()
+time.sleep(3)
+er_cornerLamp.on()
+er_bedLamp.on()
+time.sleep(3)

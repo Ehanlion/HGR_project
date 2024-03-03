@@ -17,7 +17,7 @@ from mediapipe.tasks.python import vision
 from collections import Counter
 
 # Configure master, debug variables
-DEBUG = True
+DEBUG = False
 
 # Configure global data:
 path = "Models/gesture_recognizer.task"  # set the path
@@ -26,6 +26,13 @@ last_N_results = []
 max_N_results = 40
 min_acceptable_certainty = 50 # integer percentage, max 100
 certainty_weight = 40
+
+# Configure Variables for Hue Lights Interaction:
+bridge_ip = "192.168.1.148"
+bridge_username = "ysFHipKKPahizAwVKB8zYJlpPbVc4tyFBLF6MJDg"
+hue = Hue(bridge_ip=bridge_ip, username=bridge_username) # create the hue object
+light_corner = hue.get_light(id_=1) # get light 1 created
+light_bed = hue.get_light(id_=2) # get light 2 created
 
 # Color codes for hue color setting:
 HUE_RED = 65535
@@ -167,6 +174,17 @@ with GestureRecognizer.create_from_options(options) as recognizer:
         if DEBUG:
             print(f'Classed Gesture: {classification}')
 
+        # Start Hue Light Control
+        
+        if classification == "Closed_Fist":
+            light_corner.off()
+            light_bed.off()
+        elif classification == "Open_Palm":
+            light_corner.on()
+            light_bed.on()
+        
+        # End Hue Light Control
+        
         cv2.imshow('test', cv2.flip(frame, 1))
         if cv2.waitKey(1) == ord('q'):
             capture.release()
