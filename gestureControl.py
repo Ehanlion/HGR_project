@@ -27,12 +27,25 @@ max_N_results = 40
 min_acceptable_certainty = 50 # integer percentage, max 100
 certainty_weight = 40
 
-# Configure Variables for Hue Lights Interaction:
+# Start Hue Bridge Information:
+# - This gets hard coded for this project
+
 bridge_ip = "192.168.1.148"
 bridge_username = "ysFHipKKPahizAwVKB8zYJlpPbVc4tyFBLF6MJDg"
 hue = Hue(bridge_ip=bridge_ip, username=bridge_username) # create the hue object
+
+# End Hue Bridge Information
+
+# Start Light Declaration Section 
+# - This gets hard coded for this project
+
 light_corner = hue.get_light(id_=1) # get light 1 created
 light_bed = hue.get_light(id_=2) # get light 2 created
+light_bookcase = hue.get_light(id_=3) # get light 3 created
+light_computer = hue.get_light(id_=4) # get light 4 created 
+lights = [light_corner, light_bed, light_bookcase, light_computer] # create array of light objects
+
+# End Light Declaration Section
 
 # Color codes for hue color setting:
 HUE_RED = 65535
@@ -176,12 +189,16 @@ with GestureRecognizer.create_from_options(options) as recognizer:
 
         # Start Hue Light Control
         
-        if classification == "Closed_Fist":
-            light_corner.off()
-            light_bed.off()
-        elif classification == "Open_Palm":
-            light_corner.on()
-            light_bed.on()
+        # Put in try-catch loop because direct commanding light object list so could fail if non light object in list
+        try:
+            if classification == "Open_Palm":
+                for item in lights:
+                    item.on() # assuming item is a light object
+            elif classification == "Closed_Fist":
+                for item in lights:
+                    item.on() # assuming item is a light object
+        except Exception as e:
+            print(f"Trying to control lights from gesture, encounted exception: {e}")
         
         # End Hue Light Control
         
