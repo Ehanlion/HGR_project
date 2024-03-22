@@ -65,20 +65,23 @@ options = GestureRecognizerOptions(
     running_mode=VisionRunningMode.LIVE_STREAM, # set mode to live stream
     result_callback=getCallbackResult) # set call back function to getResult
 
+
 with GestureRecognizer.create_from_options(options) as recognizer:
     cap = cv2.VideoCapture(0) # open the cv2 video capture
     if not cap.isOpened(): exit() # kill the program if we cannot open the capture device
+    
+    # trackers for the fps
+    timestamp = 0 # start frame counter
+    prev_frame_time = 0 # previous frames time for fps calculation
+    total_fps = [] # list of last 'N' fps values for average calculation
     
     # Setup for the hand tracking visualization:
     mp_hands = mp.solutions.hands
     mp_drawing = mp.solutions.drawing_utils
     hands = mp_hands.Hands()
     
-    # trackers for the fps
-    timestamp = 0 # start frame counter
-    prev_frame_time = 0 # previous frames time for fps calculation
-    total_fps = [] # list of last 'N' fps values for average calculation
-        
+    DRAW_HANDS = True # control if we draw the hands
+    
     while True:
         ret, frame = cap.read() # grabe ret and frame, ret = T/F, frame = cv2 frame
         if not ret: break
@@ -88,7 +91,8 @@ with GestureRecognizer.create_from_options(options) as recognizer:
         avg_fps, total_fps = calculateAverageFPS(total_fps) # Calculate average fps
         
         # MediaPipe Hand tracking
-        hand_results = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) # process rgb frame for hand positions
+        if DRAW_HANDS:
+            hand_results = hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) # process rgb frame for hand positions
         
         # Setup image and then get result data from model:
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame) # define the mp_image
@@ -99,17 +103,18 @@ with GestureRecognizer.create_from_options(options) as recognizer:
         timestamp = timestamp + 1 # increment frame counter
         
         # Draw hand landmarks
-        if hand_results.multi_hand_landmarks:
-            for hand_landmarks in hand_results.multi_hand_landmarks:
-                mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+        if DRAW_HANDS:
+            if hand_results.multi_hand_landmarks:
+                for hand_landmarks in hand_results.multi_hand_landmarks:
+                    mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
         
         # Add the overlay
         frame = cv2.flip(frame, 1) # flip the frame first
         textHand1 = classification if classification and (handedness == "Left")  else ""
         textHand2 = classification if classification and (handedness == "Right") else ""
-        cv2.putText(frame, f"LH: {textHand1}", (5,35), cv2.FONT_HERSHEY_TRIPLEX, 0.8, (0,0,255), 2) # Draw left hand data
-        cv2.putText(frame, f"RH: {textHand2}", (5,60), cv2.FONT_HERSHEY_TRIPLEX, 0.8, (0,0,255), 2) # Draw right hand data
-        cv2.putText(frame, f'{int(fps)}|{int(avg_fps)}', (5,85), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 0, 255), 2) # Draw current FPS
+        cv2.putText(frame, f"LH: {textHand1}", (5,35), cv2.FONT_HERSHEY_TRIPLEX, 0.8, (0,255,0), 2) # Draw left hand data
+        cv2.putText(frame, f"RH: {textHand2}", (5,60), cv2.FONT_HERSHEY_TRIPLEX, 0.8, (0,255,0), 2) # Draw right hand data
+        cv2.putText(frame, f'fps_avg={int(avg_fps)}', (5,85), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 255, 0), 2) # Draw current FPS
 
         # Display the image
         cv2.imshow('frame', frame) # show the frame

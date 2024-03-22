@@ -1,7 +1,13 @@
-# Ethan Owen, 3/12/2024
+# Ethan Owen, 3/14/2024
 # Master program for the HGR project.
 # Implements gesture recognition and complex sequence recognition
 # Implements various light related functions
+# Full function completed on 3/14/2024 and tests on RPI5 to be working
+# Turn lights on/off, modulate brightness/saturation, color wheel functions
+
+# Virtual environment note:
+# on RPI5, using virtual env, activate with 'source envionment_name/bin/activate' e.x. 'source env/bin/activate'
+# on RPI5, using virtual env, deactivate with 'deactivate' while within the env. 
 
 from huesdk import Discover
 from huesdk import Hue
@@ -16,24 +22,31 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from collections import Counter
 
+# Master Warning:
+# On the raspberry pi, DO NOT TRY TO HAVE ANY VIDEO OUTPUTS. cv2.imshow() will cause a terrible error
+# To subvert this, use the ON_LOCAL_RPI flag, set=True on board and set=False on desktop. Flag stops any call to cv2.imshow()
+
 # Configure master, debug variables
+ON_LOCAL_RPI = False # controls if running on rpi or not, True disables all video output and enables console output instead
 DEBUG_GENERAL = False # controls general debug outputs
 DEBUG_LOCATION = False # controls the location-specific debug outputs
-DEBUG_COLORS = True # control the color/brightness/saturation changing debug outputs
-COMPLEX_GUI = True # controls whether or not to draw augmented fields on the output frame
+DEBUG_COLORS = False # control the color/brightness/saturation changing debug outputs
+DEBUG_FPS = True # control whether or not to be printing out the fps
+SIMPLE_COLORS = True # control if we use simple or complex color list for color switching
 DRAW_HANDS = False # controls whether or not to draw hand landmarks CAUTION: severe fps impact
 
 # Configure global data:
 path = "Models/gesture_recognizer.task"  # set the model's path
 rawModelResults = [""] # global tracker for raw results directly extract from the GestureRecognizer model from MediaPipes
-classifiedResults = [] # global tracker for all classified results
+classifiedResults = ["Unknown"] # global tracker for all classified results
+lastStrongClassification = "Unknown"
 
-maxClassifiedResults = 20 # max amount of classified gestures to keep stored at one time
-if DRAW_HANDS:
+maxClassifiedResults = 30 # max amount of classified gestures to keep stored at one time
+if DRAW_HANDS or ON_LOCAL_RPI:
     maxClassifiedResults = 10 # change if drawing hands since frame time effect this
     
 minClassifyThreshold = 35 # threshold for calling a gesture a gesture, values between 0-100 (integer)
-if DRAW_HANDS:
+if DRAW_HANDS or ON_LOCAL_RPI:
     minClassifyThreshold = 20 # change if drawing hands since frame time effect this
 
 # ``
@@ -56,15 +69,13 @@ bridge_username = "ysFHipKKPahizAwVKB8zYJlpPbVc4tyFBLF6MJDg"
 try:
     hue = Hue(bridge_ip=bridge_ip, username=bridge_username) # create the hue bridge object
     
-    # Get and print light data for debug purposes
-    if DEBUG_GENERAL:
-        lights = hue.get_lights()
-        for light in lights:
-            print(f"ID: {light.id_}")
-            print(f"    Name: {light.name}")
-            print(f"    Brightness: {light.bri}")
-            print(f"    Hue: {light.hue}")
-            print(f"    Saturation: {light.sat}")
+    lights = hue.get_lights()
+    for light in lights:
+        print(f"Object ID: {light.id_}")
+        print(f"    Name: {light.name}")
+        print(f"    Brightness: {light.bri}")
+        print(f"    Hue: {light.hue}")
+        print(f"    Saturation: {light.sat}")
     
     # Create all of the lights
     light_corner = hue.get_light(id_=1)
@@ -124,6 +135,17 @@ hueColors = [hue_white_hex, hue_lightRed,
              hue_purple_hex, hue_darkPurple_hex,
              hue_pink_hex, hue_lightRose_hex]
 
+hueColorSimple = [hue_white_hex,
+                  hue_red_hex,
+                  hue_orange_hex,
+                  hue_yellow_hex,
+                  hue_green_hex,
+                  hue_blue_hex,
+                  hue_pink_hex]
+
+if SIMPLE_COLORS:
+    hueColors = hueColorSimple
+
 # End Pre-declared Hue Values
 
 # ``
@@ -178,7 +200,7 @@ def store_result(result: GestureRecognizerResult, output_image: mp.Image, timest
 def classify_gesture():
     gesture_pattern = r"gestures=\[\[Category\(.*?category_name='([^']*)'\)\]\]"
     gesture_match = re.search(gesture_pattern, rawModelResults[-1])
-    gesture_category = gesture_match.group(1) if gesture_match else None
+    gesture_category = gesture_match.group(1) if gesture_match else "Unknown"
     return gesture_category
 
 # Get last non-none element in a list:
@@ -258,7 +280,6 @@ def setLightState(bridge: Hue, light: Hue.get_light, state: int):
             light.off()
         else:
             light.on()
-            light.set_brightness(hue_max_bright) # default to max brightness
     except Exception as e:
         print(f'Exception encountered in setLightState: {e}')
         return 1
@@ -332,7 +353,7 @@ with GestureRecognizer.create_from_options(options) as recognizer:
     
     # general fields:
     mpTimestamp = 0 # stores only-increasing amount of timestamps for OpenCV and MediaPipe purposes 
-    gestureClassification = "" # stores the last classification result of looking for a hand gesture
+    gestureClassification = "Unknown" # stores the last classification result of looking for a hand gesture
     gestureCertainty = 0.0 # stores the certainty in any given gesture on a scale of     
     
     # hand landmark fields:
@@ -343,6 +364,8 @@ with GestureRecognizer.create_from_options(options) as recognizer:
     lastMovement = [0,0] # store information about which direction the hand last moved in
     movements = [[0,0]] # store last N hand location movements
     maxMovements = 20 # stores the maximum allowed number of hand movements (10 worked well)
+    if DRAW_HANDS or ON_LOCAL_RPI:
+        maxMovements = 10 # set down to 10 now instead of 20
     averageMovement_x = 0.0 # stores the average of the last N x movements
     averageMovement_y = 0.0 # store the average of the last N y movements
     
@@ -353,6 +376,7 @@ with GestureRecognizer.create_from_options(options) as recognizer:
     colorSwipingThreshold = 0.101 # set the color sweeping threshold for when we actually swipe between colors
     brightnessIncrement = 50 # set the brightness increment for changing brightness
     saturationIncrement = 50 # set the saturation increment for changing light saturation 
+    lightState = lightList[0].is_on
     
     # fps fields:
     prev_ft = 0 # stores the prior frame time
@@ -376,6 +400,7 @@ with GestureRecognizer.create_from_options(options) as recognizer:
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
         result = recognizer.recognize_async(image,mpTimestamp)
         gestureClassification = classify_gesture()
+        # print(f"gesture class={gestureClassification}")
         classifiedResults.append(gestureClassification)
         rawModelResults = rawModelResults[-1:]
         mpTimestamp = mpTimestamp + 1
@@ -383,12 +408,25 @@ with GestureRecognizer.create_from_options(options) as recognizer:
         # determine the class of gesture detected in this loop cycle
         if len(classifiedResults) > maxClassifiedResults: classifiedResults = classifiedResults[1:]
         common_class, gestureCertainty = getCertainty(classifiedResults)
-        if common_class == classifiedResults[-1]: gestureCertainty = gestureCertainty
-        if gestureCertainty < minClassifyThreshold: gestureClassification = "Unknown" # set classification to "Unknown" if we don't get good certainty
-        else: gestureClassification = common_class
+        if common_class == classifiedResults[-1]: 
+            gestureCertainty = gestureCertainty
+        if gestureCertainty > minClassifyThreshold: 
+            gestureClassification = common_class # set classification to "Unknown" if we don't get good certainty
+        else:
+            gestureClassification = "Unknown"
+        
+        # Print whenever we lose a gesture 
+        if lastStrongClassification != gesture_unknown and gestureClassification == gesture_unknown:
+            print(f"Lost gesture, was {lastStrongClassification}, ts={mpTimestamp}")
+        elif lastStrongClassification == gesture_unknown and gestureClassification != gesture_unknown:
+            print(f"Found gesture, now {gestureClassification}, ts={mpTimestamp}")
+        elif lastStrongClassification != gestureClassification:
+            print(f"Changed gesture, was {lastStrongClassification} and now {gestureClassification}, ts={mpTimestamp}")
+        
+        lastStrongClassification = gestureClassification # set last to current gesture
         
         # This section draws the MediaPipe hands to the frame if the flag is true, very slow render time
-        if DRAW_HANDS:
+        if DRAW_HANDS and not ON_LOCAL_RPI:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # convert frame color
             mpHandResults = hands.process(frame) # process the frame
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) # reconvert frame color
@@ -420,17 +458,11 @@ with GestureRecognizer.create_from_options(options) as recognizer:
             averageMovement_x = 0.0 # reset the x average movement to 0
             averageMovement_y = 0.0 # reset the y average movement to 0
         
+        # get the current lights state:
+        lightState = lightList[0].is_on
+        
         # End MP Model Processing
         
-        # printing fields for debug work
-        if DEBUG_GENERAL:
-            if averageMovement_x != 0.0 or averageMovement_y != 0.0:
-                print(f"x_avg_mov={averageMovement_x}, y_avg_mov={averageMovement_y}")
-            # print(f"Gesture_Class={classification}, Movement={movement}, avg_x_mov={x_averageMovement}, avg_y_mov={y_averageMovement}, lenLastNMovement={len(last_N_movements)}")
-            
-        if DEBUG_LOCATION:
-            print(f"coord={single_coordinate}")
-            
         # ========================
         # Start Hue Light Control
         # gesture mapping:
@@ -439,15 +471,26 @@ with GestureRecognizer.create_from_options(options) as recognizer:
         #   - open_palm = control colors
         #   - closed_fist = control brightness
         
+        if DEBUG_LOCATION:
+            print(f"coord={single_coordinate}, avg_x={averageMovement_x}, avg_y={averageMovement_y}")
+        
         # Enter here to simply turn the lights on:
-        if gestureClassification == gesture_thumbUp: # enter if turn lights on 
+        if gestureClassification == gesture_thumbUp and not lightState: # enter if turn lights on 
             for l in lightList:
                 setLightState(Hue,l,1)
+                
+            # debug mode for seeing changes
+            if DEBUG_COLORS or ON_LOCAL_RPI:    
+                print(f"LIT: Turned On, ts={mpTimestamp}")
         
         # Enter here to simply turn the lights off:
-        elif gestureClassification == gesture_thumbDown: # enter if turn lights off
+        elif gestureClassification == gesture_thumbDown and lightState: # enter if turn lights off
             for l in lightList:
                 setLightState(Hue,l,0)
+                
+            # debug mode for seeing changes
+            if DEBUG_COLORS or ON_LOCAL_RPI:
+                print(f"LIT: Turned Off, ts={mpTimestamp}")    
                 
         # Enter here for color swiping:
         elif gestureClassification == gesture_openPalm and averageMovement_x != 0.0: # enter color changing section
@@ -458,8 +501,8 @@ with GestureRecognizer.create_from_options(options) as recognizer:
                     setLightColor(Hue,l,color=hueColors[colorIndex]) # set color based on new index
                     
                 # debug code for seeing changes
-                if DEBUG_COLORS:
-                    print(f"CLR: Move_X={averageMovement_x}, Hand_LEFT, newColor={hueColors[colorIndex]}")
+                if DEBUG_COLORS or ON_LOCAL_RPI:
+                    print(f"CLR: Move_X={averageMovement_x}, Hand_LEFT, newColor={hueColors[colorIndex]}, ts={mpTimestamp}")
                     
                 averageMovement_x = 0.0 # reset movement
             
@@ -470,8 +513,8 @@ with GestureRecognizer.create_from_options(options) as recognizer:
                     setLightColor(Hue,l,color=hueColors[colorIndex]) # set color based on new index
                 
                 # debug code for seeing changes
-                if DEBUG_COLORS:
-                    print(f"CLR: Move_X={averageMovement_x}, Hand_RIGHT, newColor={hueColors[colorIndex]}")
+                if DEBUG_COLORS or ON_LOCAL_RPI:
+                    print(f"CLR: Move_X={averageMovement_x}, Hand_RIGHT, newColor={hueColors[colorIndex]}, ts={mpTimestamp}")
                     
                 averageMovement_x = 0.0 # reset movement
         
@@ -495,8 +538,8 @@ with GestureRecognizer.create_from_options(options) as recognizer:
                         setLightBrightness(hue,l,colorBrightness,1) # decrease the brightness here
                         
                 # debug code for seeing changes
-                if DEBUG_COLORS:
-                    print(f"BRI: Move_Y={averageMovement_y}, Hand_DOWN, newBrightness={colorBrightness}")
+                if DEBUG_COLORS or ON_LOCAL_RPI:
+                    print(f"BRI: Move_Y={averageMovement_y}, Hand_DOWN, newBrightness={colorBrightness}, ts={mpTimestamp}")
                     
                 averageMovement_y = 0.0 # reset movement
                 
@@ -513,8 +556,8 @@ with GestureRecognizer.create_from_options(options) as recognizer:
                     setLightBrightness(hue,l,colorBrightness,1) # increase brightness here
                     
                 # debug code for seeing changes
-                if DEBUG_COLORS:
-                    print(f"BRI: Move_Y={averageMovement_y}, Hand_UP, newBrightness={colorBrightness}")
+                if DEBUG_COLORS or ON_LOCAL_RPI:
+                    print(f"BRI: Move_Y={averageMovement_y}, Hand_UP, newBrightness={colorBrightness}, ts={mpTimestamp}")
                     
                 averageMovement_y = 0.0 # reset movement
         
@@ -533,8 +576,8 @@ with GestureRecognizer.create_from_options(options) as recognizer:
                     setLightSaturation(hue,l,colorSaturation,1) # decrease the saturation here
                     
                 # debug code for seeing changes
-                if DEBUG_COLORS:
-                    print(f"SAT: Move_Y={averageMovement_y}, Hand_DOWN, newSaturation={colorBrightness}")
+                if DEBUG_COLORS or ON_LOCAL_RPI:
+                    print(f"SAT: Move_Y={averageMovement_y}, Hand_DOWN, newSaturation={colorSaturation}, ts={mpTimestamp}")
                     
                 averageMovement_y = 0.0 # reset movement
                 
@@ -551,8 +594,8 @@ with GestureRecognizer.create_from_options(options) as recognizer:
                     setLightSaturation(hue,l,colorSaturation,1) # increase saturation here
 
                 # debug code for seeing changes
-                if DEBUG_COLORS:
-                    print(f"SAT: Move_Y={averageMovement_y}, Hand_DOWN, newSaturation={colorBrightness}")
+                if DEBUG_COLORS or ON_LOCAL_RPI:
+                    print(f"SAT: Move_Y={averageMovement_y}, Hand_DOWN, newSaturation={colorSaturation}, ts={mpTimestamp}")
                     
                 averageMovement_y = 0.0 # reset movement
             
@@ -560,24 +603,19 @@ with GestureRecognizer.create_from_options(options) as recognizer:
         # ========================
         
         # Show the frame
+        fps, prev_ft = get_fps(prev_ft)
+        if mpTimestamp % 60 == 0 and DEBUG_FPS: print(f"Current FPS: {fps}, ts={mpTimestamp}")
+        if ON_LOCAL_RPI:
+            pass # don't do anything
         
-        frame = cv2.flip(frame,1)
-        
-        # only waste time calculating the fps if we are displaying complex gui
-        if COMPLEX_GUI:
-            fps, prev_ft = get_fps(prev_ft)
-            cv2.putText(frame, f"FPS: {fps}", (5,55), cv2. FONT_HERSHEY_SIMPLEX, 0.5,(0,255,0), 2)
-        
-        cv2.putText(frame, f"Class: {gestureClassification} {gestureCertainty}", (5,35), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
-        cv2.imshow('Home Gesture Recognition', frame)
-        if cv2.waitKey(1) == ord('q'):
-            capture.release()
-            cv2.destroyAllWindows()
-            break
-        
-        while False:
-            if cv2.waitKey(1) == ord('c'):
-                break
+        # if we are running off of raspberry pi, display the frames
+        else:
+            frame = cv2.flip(frame,1)
+            cv2.putText(frame, f"FPS: {fps}", (5,55), cv2. FONT_HERSHEY_SIMPLEX, 0.5,(0,200,0), 2)
+            cv2.putText(frame, f"Class: {gestureClassification} {gestureCertainty}", (5,35), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,200,0), 2)
+            cv2.imshow('Home Gesture Recognition', frame)
+            
+            # exit the program if 'q' is pressed
             if cv2.waitKey(1) == ord('q'):
                 capture.release()
                 cv2.destroyAllWindows()

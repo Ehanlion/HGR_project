@@ -44,6 +44,10 @@ while True:
     if cv.waitKey(1) == ord('q'):
         break
     
+    while False:
+        if cv.waitKey(1) == ord('c'):
+            break
+    
 # at the end, release and destroy frames:
 cap.release() # release the capture at the end
 cv.destroyAllWindows() # clean and destroy opened windows
